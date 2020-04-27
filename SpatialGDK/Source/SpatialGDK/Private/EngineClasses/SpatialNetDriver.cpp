@@ -73,7 +73,6 @@ DEFINE_STAT(STAT_SpatialActorsChanged);
 USpatialNetDriver::USpatialNetDriver(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	, LoadBalanceStrategy(nullptr)
-	, LoadBalanceEnforcer(nullptr)
 	, bAuthoritativeDestruction(true)
 	, bConnectAsClient(false)
 	, bPersistSpatialConnection(true)
@@ -430,6 +429,7 @@ void USpatialNetDriver::CreateAndInitializeLoadBalancingClasses()
 	}
 
 	VirtualWorkerTranslator = MakeUnique<SpatialVirtualWorkerTranslator>(LoadBalanceStrategy, Connection->GetWorkerId());
+	VirtualWorkerTranslator->SetNetDriver(this);
 
 	if (IsServer())
 	{
@@ -835,6 +835,15 @@ void USpatialNetDriver::BeginDestroy()
 
 	if (Connection != nullptr)
 	{
+		// Delete all load-balancing partition entities if we're translator authoritative.
+		if (VirtualWorkerTranslationManager != nullptr)
+		{
+			for (const SpatialVirtualWorkerTranslationManager::PartitionInfo& Partition : VirtualWorkerTranslationManager->GetAllPartitions())
+			{
+				Connection->SendDeleteEntityRequest(Partition.PartitionEntityId);
+			}
+		}
+
 		// Cleanup our corresponding worker entity if it exists.
 		if (WorkerEntityId != SpatialConstants::INVALID_ENTITY_ID)
 		{
@@ -1633,15 +1642,6 @@ void USpatialNetDriver::TickDispatch(float DeltaTime)
 		{
 			SpatialMetrics->TickMetrics(Time);
 		}
-
-		if (LoadBalanceEnforcer.IsValid())
-		{
-			SCOPE_CYCLE_COUNTER(STAT_SpatialUpdateAuthority);
-			for (const auto& AclAssignmentRequest : LoadBalanceEnforcer->ProcessQueuedAclAssignmentRequests())
-			{
-				Sender->SetAclWriteAuthority(AclAssignmentRequest);
-			}
-		}
 	}
 }
 
@@ -1849,7 +1849,7 @@ namespace
 	}
 }
 
-bool USpatialNetDriver::CreateSpatialNetConnection(const FURL& InUrl, const FUniqueNetIdRepl& UniqueId, const FName& OnlinePlatformName, USpatialNetConnection** OutConn)
+bool USpatialNetDriver::CreateSpatialNetConnection(const FURL& InUrl, const FUniqueNetIdRepl& UniqueId, const FName& OnlinePlatformName, const Worker_EntityId& ClientSystemEntityId, USpatialNetConnection** OutConn)
 {
 	check(*OutConn == nullptr);
 	*OutConn = NewObject<USpatialNetConnection>(GetTransientPackage(), NetConnectionClass);
@@ -1879,6 +1879,7 @@ bool USpatialNetDriver::CreateSpatialNetConnection(const FURL& InUrl, const FUni
 	const TCHAR* WorkerAttributeOption = InUrl.GetOption(TEXT("workerAttribute"), nullptr);
 	check(WorkerAttributeOption);
 	SpatialConnection->ConnectionOwningWorkerId = FString(WorkerAttributeOption).Mid(1); // Trim off the = at the beginning.
+	SpatialConnection->ConnectingClientSystemEntityId = ClientSystemEntityId;
 
 	// Register workerId and its connection.
 	if (TOptional<FString> WorkerId = ExtractWorkerIDFromAttribute(SpatialConnection->ConnectionOwningWorkerId))
@@ -1965,11 +1966,11 @@ void USpatialNetDriver::ProcessPendingDormancy()
 	PendingDormantChannels = MoveTemp(RemainingChannels);
 }
 
-void USpatialNetDriver::AcceptNewPlayer(const FURL& InUrl, const FUniqueNetIdRepl& UniqueId, const FName& OnlinePlatformName)
+void USpatialNetDriver::AcceptNewPlayer(const FURL& InUrl, const FUniqueNetIdRepl& UniqueId, const FName& OnlinePlatformName, const Worker_EntityId& ClientSystemEntityId)
 {
 	USpatialNetConnection* SpatialConnection = nullptr;
 
-	if (!CreateSpatialNetConnection(InUrl, UniqueId, OnlinePlatformName, &SpatialConnection))
+	if (!CreateSpatialNetConnection(InUrl, UniqueId, OnlinePlatformName, ClientSystemEntityId, &SpatialConnection))
 	{
 		UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Failed to create SpatialNetConnection!"));
 		return;
@@ -2000,7 +2001,7 @@ void USpatialNetDriver::PostSpawnPlayerController(APlayerController* PlayerContr
 	// We create a connection here so that any code that searches for owning connection, etc on the server
 	// resolves ownership correctly
 	USpatialNetConnection* OwnershipConnection = nullptr;
-	if (!CreateSpatialNetConnection(FURL(nullptr, *URLString, TRAVEL_Absolute), FUniqueNetIdRepl(), FName(), &OwnershipConnection))
+	if (!CreateSpatialNetConnection(FURL(nullptr, *URLString, TRAVEL_Absolute), FUniqueNetIdRepl(), FName(), SpatialConstants::INVALID_ENTITY_ID, &OwnershipConnection))
 	{
 		UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Failed to create SpatialNetConnection!"));
 		return;

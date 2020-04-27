@@ -14,12 +14,10 @@
 #include "EngineClasses/SpatialNetConnection.h"
 #include "EngineClasses/SpatialPackageMapClient.h"
 #include "EngineClasses/SpatialVirtualWorkerTranslator.h"
-#include "EngineClasses/SpatialLoadBalanceEnforcer.h"
 #include "Interop/Connection/SpatialWorkerConnection.h"
 #include "Interop/GlobalStateManager.h"
 #include "Interop/SpatialPlayerSpawner.h"
 #include "Interop/SpatialSender.h"
-#include "Schema/AuthorityIntent.h"
 #include "Schema/DynamicComponent.h"
 #include "Schema/RPCPayload.h"
 #include "Schema/SpawnData.h"
@@ -64,7 +62,6 @@ void USpatialReceiver::Init(USpatialNetDriver* InNetDriver, FTimerManager* InTim
 	PackageMap = InNetDriver->PackageMap;
 	ClassInfoManager = InNetDriver->ClassInfoManager;
 	GlobalStateManager = InNetDriver->GlobalStateManager;
-	LoadBalanceEnforcer = InNetDriver->LoadBalanceEnforcer.Get();
 	TimerManager = InTimerManager;
 	RPCService = InRPCService;
 
@@ -223,15 +220,6 @@ void USpatialReceiver::OnAddComponent(const Worker_AddComponentOp& Op)
 		check(bInCriticalSection);
 		PendingAddActors.AddUnique(Op.entity_id);
 		return;
-	case SpatialConstants::ENTITY_ACL_COMPONENT_ID:
-	case SpatialConstants::AUTHORITY_INTENT_COMPONENT_ID:
-	case SpatialConstants::COMPONENT_PRESENCE_COMPONENT_ID:
-	case SpatialConstants::NET_OWNING_CLIENT_WORKER_COMPONENT_ID:
-		if (LoadBalanceEnforcer != nullptr)
-		{
-			LoadBalanceEnforcer->OnLoadBalancingComponentAdded(Op);
-		}
-		return;
 	case SpatialConstants::WORKER_COMPONENT_ID:
 		if (NetDriver->IsServer() && !WorkerConnectionEntities.Contains(Op.entity_id))
 		{
@@ -371,11 +359,6 @@ void USpatialReceiver::OnRemoveComponent(const Worker_RemoveComponentOp& Op)
 		RPCService->OnRemoveMulticastRPCComponentForEntity(Op.entity_id);
 	}
 
-	if (LoadBalanceEnforcer != nullptr && LoadBalanceEnforcer->HandlesComponent(Op.component_id))
-	{
-		LoadBalanceEnforcer->OnLoadBalancingComponentRemoved(Op);
-	}
-
 	// We are queuing here because if an Actor is removed from your view, remove component ops will be
 	// generated and sent first, and then the RemoveEntityOp will be sent. In this case, we only want
 	// to delete the Actor and not delete the subobjects that the RemoveComponent relate to.
@@ -497,11 +480,6 @@ void USpatialReceiver::OnAuthorityChange(const Worker_AuthorityChangeOp& Op)
 	{
 		GlobalStateManager->TrySendWorkerReadyToBeginPlay();
 		return;
-	}
-
-	if (Op.component_id == SpatialConstants::ENTITY_ACL_COMPONENT_ID && LoadBalanceEnforcer != nullptr)
-	{
-		LoadBalanceEnforcer->OnAclAuthorityChanged(Op);
 	}
 
 	SCOPE_CYCLE_COUNTER(STAT_ReceiverAuthChange);
@@ -706,8 +684,8 @@ void USpatialReceiver::HandleActorAuthority(const Worker_AuthorityChangeOp& Op)
 				}
 
 				// With load-balancing enabled, we already set ROLE_SimulatedProxy and trigger OnAuthorityLost when we
-				// set AuthorityIntent to another worker. This conditional exists to dodge calling OnAuthorityLost
-				// twice.
+				// set AuthorityDelegation to another server-side worker partition. This conditional exists to dodge
+				// calling OnAuthorityLost twice.
 				if (Actor->Role != ROLE_SimulatedProxy)
 				{
 					Actor->Role = ROLE_SimulatedProxy;
@@ -1544,14 +1522,6 @@ void USpatialReceiver::OnComponentUpdate(const Worker_ComponentUpdateOp& Op)
 	case SpatialConstants::SERVER_RPC_ENDPOINT_COMPONENT_ID_LEGACY:
 	case SpatialConstants::NETMULTICAST_RPCS_COMPONENT_ID_LEGACY:
 		HandleRPCLegacy(Op);
-		return;
-	case SpatialConstants::AUTHORITY_INTENT_COMPONENT_ID:
-	case SpatialConstants::COMPONENT_PRESENCE_COMPONENT_ID:
-	case SpatialConstants::NET_OWNING_CLIENT_WORKER_COMPONENT_ID:
-		if (LoadBalanceEnforcer != nullptr)
-		{
-			LoadBalanceEnforcer->OnLoadBalancingComponentUpdated(Op);
-		}
 		return;
 	case SpatialConstants::VIRTUAL_WORKER_TRANSLATION_COMPONENT_ID:
 		if (NetDriver->VirtualWorkerTranslator.IsValid())
