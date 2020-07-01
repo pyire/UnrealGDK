@@ -433,8 +433,6 @@ void USpatialNetDriver::CreateAndInitializeLoadBalancingClasses()
 
 	if (IsServer())
 	{
-		LoadBalanceEnforcer = MakeUnique<SpatialLoadBalanceEnforcer>(Connection->GetWorkerId(), StaticComponentView, VirtualWorkerTranslator.Get());
-
 		const bool bIsMultiWorkerEnabled = WorldSettings != nullptr && WorldSettings->IsMultiWorkerEnabled();
 		if (!bIsMultiWorkerEnabled)
 		{
@@ -1641,6 +1639,15 @@ void USpatialNetDriver::TickDispatch(float DeltaTime)
 		if (SpatialMetrics != nullptr && SpatialGDKSettings->bEnableMetrics)
 		{
 			SpatialMetrics->TickMetrics(Time);
+		}
+
+		check(LoadBalanceEnforcer.IsValid())
+		{
+			SCOPE_CYCLE_COUNTER(STAT_SpatialUpdateAuthority);
+			for (const auto& AclAssignmentRequest : LoadBalanceEnforcer->ProcessQueuedAclAssignmentRequests())
+			{
+				Sender->SetAclWriteAuthority(AclAssignmentRequest);
+			}
 		}
 	}
 }
