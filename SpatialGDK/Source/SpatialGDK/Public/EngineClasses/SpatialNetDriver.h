@@ -113,6 +113,8 @@ public:
 
 	void RefreshActorDormancy(AActor* Actor, bool bMakeDormant);
 
+	void RefreshActorVisibility(AActor* Actor, bool bMakeVisible);
+
 	void AddPendingDormantChannel(USpatialActorChannel* Channel);
 	void RemovePendingDormantChannel(USpatialActorChannel* Channel);
 	void RegisterDormantEntityId(Worker_EntityId EntityId);
