@@ -76,6 +76,8 @@ public:
 	// Currently, this is just the default strategy.
 	UAbstractLBStrategy* GetLBStrategyForVisualRendering() const;
 
+	TMap<FName, uint32> GetLayerVirtualWorkerRequirements() const;
+
 private:
 	TArray<VirtualWorkerId> VirtualWorkerIds;
 
