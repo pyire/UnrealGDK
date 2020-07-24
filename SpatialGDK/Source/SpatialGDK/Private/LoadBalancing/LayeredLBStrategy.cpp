@@ -96,7 +96,6 @@ void ULayeredLBStrategy::SetLocalVirtualWorkerId(VirtualWorkerId InLocalVirtualW
 	}
 
 	LocalVirtualWorkerId = InLocalVirtualWorkerId;
-c
 }
 
 TSet<VirtualWorkerId> ULayeredLBStrategy::GetVirtualWorkerIds() const
