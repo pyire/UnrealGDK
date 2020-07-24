@@ -324,7 +324,6 @@ const TArray<Worker_ComponentId> REQUIRED_COMPONENTS_FOR_NON_AUTH_CLIENT_INTERES
 // A list of components clients require on entities they are authoritative over on top of the components already checked out by the interest query.
 const TArray<Worker_ComponentId> REQUIRED_COMPONENTS_FOR_AUTH_CLIENT_INTEREST = TArray<Worker_ComponentId>
 {
-
 	// RPCs from the server
 	SERVER_ENDPOINT_COMPONENT_ID,
 	SERVER_RPC_ENDPOINT_COMPONENT_ID_LEGACY
