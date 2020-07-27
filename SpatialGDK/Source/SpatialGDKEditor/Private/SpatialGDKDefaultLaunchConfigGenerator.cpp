@@ -95,19 +95,19 @@ bool WriteLoadbalancingSection(TSharedRef<TJsonWriter<>> Writer, const FName& Wo
 
 } // anonymous namespace
 
-uint32 GetWorkerCountFromWorldSettings(const UWorld& World)
+TMap<FName, int32> GetLayerWorkerCountMappingFromWorldSettings(const UWorld& World)
 {
 	const ASpatialWorldSettings* WorldSettings = Cast<ASpatialWorldSettings>(World.GetWorldSettings());
 
 	if (WorldSettings == nullptr)
 	{
 		UE_LOG(LogSpatialGDKDefaultLaunchConfigGenerator, Error, TEXT("Missing SpatialWorldSettings on map %s"), *World.GetMapName());
-		return 1;
+		return {{SpatialConstants::DefaultLayer, 1}};
 	}
 
 	if (WorldSettings->IsMultiWorkerEnabled() == false)
 	{
-		return 1;
+		return {{SpatialConstants::DefaultLayer, 1}};
 	}
 
 	FSpatialGDKEditorModule& EditorModule = FModuleManager::GetModuleChecked<FSpatialGDKEditorModule>("SpatialGDKEditor");
@@ -115,22 +115,20 @@ uint32 GetWorkerCountFromWorldSettings(const UWorld& World)
 	if (WorldSettings->DefaultLayerLoadBalanceStrategy == nullptr)
 	{
 		UE_LOG(LogSpatialGDKDefaultLaunchConfigGenerator, Error, TEXT("Missing Load balancing strategy on map %s"), *World.GetMapName());
-		return 1;
+		return {{SpatialConstants::DefaultLayer, 1}};
 	}
-	else
+
+	UAbstractRuntimeLoadBalancingStrategy* LoadBalancingStrat = nullptr;
+	FIntPoint Dimension;
+	if (!EditorModule.GetLBStrategyExtensionManager().GetDefaultLaunchConfiguration(WorldSettings->DefaultLayerLoadBalanceStrategy->GetDefaultObject<UAbstractLBStrategy>(), LoadBalancingStrat, Dimension))
 	{
-		UAbstractRuntimeLoadBalancingStrategy* LoadBalancingStrat = nullptr;
-		FIntPoint Dimension;
-		if (!EditorModule.GetLBStrategyExtensionManager().GetDefaultLaunchConfiguration(WorldSettings->DefaultLayerLoadBalanceStrategy->GetDefaultObject<UAbstractLBStrategy>(), LoadBalancingStrat, Dimension))
-		{
-			UE_LOG(LogSpatialGDKDefaultLaunchConfigGenerator, Error, TEXT("Could not get the default SpatialOS Load balancing strategy from %s"), *WorldSettings->DefaultLayerLoadBalanceStrategy->GetName());
-			NumWorkers += 1;
-		}
-		else
-		{
-			NumWorkers += LoadBalancingStrat->GetNumberOfWorkersForPIE();
-		}
+		UE_LOG(LogSpatialGDKDefaultLaunchConfigGenerator, Error, TEXT("Could not get the default SpatialOS Load balancing strategy from %s"), *WorldSettings->DefaultLayerLoadBalanceStrategy->GetName());
+		return {{SpatialConstants::DefaultLayer, 1}};
 	}
+
+	TMap<FName, int32> LayerToWorkerCounts{};
+
+	LayerToWorkerCounts.Add(SpatialConstants::DefaultLayer, LoadBalancingStrat->GetNumberOfWorkersForPIE());
 
 	for (const auto& Layer : WorldSettings->WorkerLayers)
 	{
@@ -142,20 +140,18 @@ uint32 GetWorkerCountFromWorldSettings(const UWorld& World)
 		if (LayerInfo.LoadBalanceStrategy == nullptr)
 		{
 			UE_LOG(LogSpatialGDKDefaultLaunchConfigGenerator, Error, TEXT("Missing Load balancing strategy on layer %s"), *LayerKey.ToString());
-			NumWorkers += 1;
+			return {{SpatialConstants::DefaultLayer, 1}};
 		}
-		else if (!EditorModule.GetLBStrategyExtensionManager().GetDefaultLaunchConfiguration(LayerInfo.LoadBalanceStrategy->GetDefaultObject<UAbstractLBStrategy>(), LoadBalancingStrat, Dimension))
+		if (!EditorModule.GetLBStrategyExtensionManager().GetDefaultLaunchConfiguration(LayerInfo.LoadBalanceStrategy->GetDefaultObject<UAbstractLBStrategy>(), LoadBalancingStrat, Dimension))
 		{
 			UE_LOG(LogSpatialGDKDefaultLaunchConfigGenerator, Error, TEXT("Could not get the SpatialOS Load balancing strategy for layer %s"), *LayerKey.ToString());
-			NumWorkers += 1;
+			return {{SpatialConstants::DefaultLayer, 1}};
 		}
-		else
-		{
-			NumWorkers += LoadBalancingStrat->GetNumberOfWorkersForPIE();
-		}
+
+		LayerToWorkerCounts.Add(LayerKey, LayerInfo.LoadBalanceStrategy->GetDefaultObject<UAbstractLBStrategy>()->GetMinimumRequiredWorkers());
 	}
 
-	return NumWorkers;
+	return LayerToWorkerCounts;
 }
 
 bool TryGetLoadBalancingStrategyFromWorldSettings(const UWorld& World, UAbstractRuntimeLoadBalancingStrategy*& OutStrategy, FIntPoint& OutWorldDimension)
@@ -199,7 +195,13 @@ bool FillWorkerConfigurationFromCurrentMap(FWorkerTypeLaunchSection& OutWorker, 
 	check(EditorWorld != nullptr);
 
 	OutWorker = SpatialGDKEditorSettings->LaunchConfigDesc.ServerWorkerConfig;
-	OutWorker.NumEditorInstances = GetWorkerCountFromWorldSettings(*EditorWorld);
+
+	uint32 TotalWorkerCount = 0;
+	for (const auto& LayerWorkerCount : GetLayerWorkerCountMappingFromWorldSettings(*EditorWorld))
+	{
+		TotalWorkerCount += LayerWorkerCount.Value;
+	}
+	OutWorker.NumEditorInstances = TotalWorkerCount;
 
 	return true;
 }
