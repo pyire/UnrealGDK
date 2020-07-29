@@ -9,7 +9,7 @@
 
 ASpatialFunctionalTestFlowController::ASpatialFunctionalTestFlowController(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
-{	
+{
 	bReplicates = true;
 	bAlwaysRelevant = true;
 
@@ -25,7 +25,7 @@ ASpatialFunctionalTestFlowController::ASpatialFunctionalTestFlowController(const
 #endif
 }
 
-void ASpatialFunctionalTestFlowController::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
+void ASpatialFunctionalTestFlowController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
@@ -56,7 +56,7 @@ void ASpatialFunctionalTestFlowController::CrossServerSetWorkerId_Implementation
 
 void ASpatialFunctionalTestFlowController::OnReadyToRegisterWithTest()
 {
-	if(!bReadyToRegisterWithTest || OwningTest == nullptr)
+	if (!bReadyToRegisterWithTest || OwningTest == nullptr)
 	{
 		return;
 	}
@@ -95,7 +95,8 @@ void ASpatialFunctionalTestFlowController::CrossServerStartStep_Implementation(i
 
 void ASpatialFunctionalTestFlowController::NotifyStepFinished()
 {
-	ensureMsgf(CurrentStep.bIsRunning, TEXT("Trying to Notify Step Finished when it wasn't running. Either the Test ended prematurely or it's logic is calling FinishStep multiple times"));
+	ensureMsgf(CurrentStep.bIsRunning, TEXT("Trying to Notify Step Finished when it wasn't running. Either the Test ended prematurely or "
+											"it's logic is calling FinishStep multiple times"));
 	if (CurrentStep.bIsRunning)
 	{
 		if (WorkerDefinition.Type == ESpatialFunctionalTestWorkerType::Server)
@@ -111,7 +112,6 @@ void ASpatialFunctionalTestFlowController::NotifyStepFinished()
 	}
 }
 
-
 bool ASpatialFunctionalTestFlowController::IsLocalController() const
 {
 	ENetMode NetMode = GetNetMode();
@@ -123,14 +123,14 @@ bool ASpatialFunctionalTestFlowController::IsLocalController() const
 	{
 		// if no PlayerController owns it it's ours.
 		// @note keep in mind that this only works because each server worker has authority (by locking) their FlowController!
-		return GetOwner() == nullptr; 
+		return GetOwner() == nullptr;
 	}
-	else if(GetNetMode() == ENetMode::NM_Client)
+	else if (GetNetMode() == ENetMode::NM_Client)
 	{
 		// @note Clients only know their own PlayerController
 		return GetOwner() != nullptr;
 	}
-	
+
 	return false;
 }
 
@@ -150,7 +150,9 @@ void ASpatialFunctionalTestFlowController::NotifyFinishTest(EFunctionalTestResul
 
 const FString ASpatialFunctionalTestFlowController::GetDisplayName()
 {
-	return FString::Printf(TEXT("[%s:%d]"), (WorkerDefinition.Type == ESpatialFunctionalTestWorkerType::Server ? TEXT("Server") : TEXT("Client")), WorkerDefinition.Id);
+	return FString::Printf(TEXT("[%s:%d]"),
+						   (WorkerDefinition.Type == ESpatialFunctionalTestWorkerType::Server ? TEXT("Server") : TEXT("Client")),
+						   WorkerDefinition.Id);
 }
 
 void ASpatialFunctionalTestFlowController::OnTestFinished()

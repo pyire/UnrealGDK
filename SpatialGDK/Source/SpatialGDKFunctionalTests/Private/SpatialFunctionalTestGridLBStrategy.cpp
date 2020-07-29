@@ -1,6 +1,5 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
 
-
 #include "SpatialFunctionalTestGridLBStrategy.h"
 #include "GameFramework/Actor.h"
 #include "SpatialFunctionalTestWorkerDelegationComponent.h"
@@ -14,7 +13,8 @@ USpatialFunctionalTestGridLBStrategy::USpatialFunctionalTestGridLBStrategy()
 
 bool USpatialFunctionalTestGridLBStrategy::ShouldHaveAuthority(const AActor& Actor) const
 {
-	USpatialFunctionalTestWorkerDelegationComponent* DelegationComponent = Actor.FindComponentByClass<USpatialFunctionalTestWorkerDelegationComponent>();
+	USpatialFunctionalTestWorkerDelegationComponent* DelegationComponent =
+		Actor.FindComponentByClass<USpatialFunctionalTestWorkerDelegationComponent>();
 
 	if (DelegationComponent != nullptr)
 	{
@@ -25,7 +25,8 @@ bool USpatialFunctionalTestGridLBStrategy::ShouldHaveAuthority(const AActor& Act
 
 VirtualWorkerId USpatialFunctionalTestGridLBStrategy::WhoShouldHaveAuthority(const AActor& Actor) const
 {
-	USpatialFunctionalTestWorkerDelegationComponent* DelegationComponent = Actor.FindComponentByClass<USpatialFunctionalTestWorkerDelegationComponent>();
+	USpatialFunctionalTestWorkerDelegationComponent* DelegationComponent =
+		Actor.FindComponentByClass<USpatialFunctionalTestWorkerDelegationComponent>();
 
 	if (DelegationComponent != nullptr)
 	{
