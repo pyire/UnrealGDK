@@ -3,7 +3,6 @@
 #include "Utils/SpatialLoadBalancingHandler.h"
 
 #include "EngineClasses/SpatialActorChannel.h"
-#include "EngineClasses/SpatialPackageMapClient.h"
 #include "LoadBalancing/AbstractLBStrategy.h"
 #include "LoadBalancing/OwnershipLockingPolicy.h"
 #include "Interop/SpatialSender.h"
